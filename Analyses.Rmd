@@ -1,0 +1,323 @@
+---
+title: "Analyses"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r Packages}
+library(lubridate)
+library(NHSRplotthedots)
+library(scales) 
+library(tidyverse) 
+```
+
+```{r Reading in data}
+load("C:/Users/anyj1/OneDrive/Desktop/Foodbank/data.rda")
+
+# Shapefile of postcode boundaries from https://datashare.ed.ac.uk/handle/10283/2597
+data_boundaries <- sf::st_read("C:/Users/anyj1/Downloads/DS_10283_2597/GB_Postcodes/GB_Postcodes/PostalSector.shp")
+
+
+# IMD from https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019
+imd <- read_excel("C:/Users/anyj1/Downloads/File_2_-_IoD2019_Domains_of_Deprivation.xlsx", 
+                  sheet = "IoD2019 Domains"
+                  )
+
+# Mapping between postcode and LSOA from https://geoportal.statistics.gov.uk/datasets/e7824b1475604212a2325cd373946235/about
+postcode_lsoa <- read.csv("C:/Users/anyj1/Downloads/PCD_OA_LSOA_MSOA_LAD_MAY22_UK_LU.csv")
+```
+
+```{r Setting date variables}
+report_date <- Sys.Date()
+report_month <- floor_date(report_date, unit = "month")
+```
+
+```{r Wrangling the data}
+data_wrangle <- data %>%
+  mutate("Date" = as.Date(Date, format = "%d/%m/%Y"),
+         "Month" = floor_date(Date, unit = "month"),
+         "Postcode" = Postcode %>%
+           str_to_upper() %>%
+           str_replace_all(" ", "") ,
+         "postcode_format" = ifelse(nchar(Postcode) == 7,
+                                    str_sub(Postcode, 1, 5),
+                                    str_sub(Postcode, 1, 4))
+         ) %>%
+  filter(Date < Sys.Date()) # data quality issues!
+
+data_spatial <- data_wrangle %>%
+  count(name = "total", .by = postcode_format) %>%
+  rename("postcode_format" = `.by`) %>%
+  left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
+
+data_demo <- data_wrangle %>%
+  pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
+  summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), .by = c(Month, Group))
+
+
+
+
+
+
+
+
+
+
+
+data_imd <- postcode_lsoa  %>%
+  mutate(Postcode = pcds %>%
+           str_to_upper() %>%
+           str_replace_all(" ", "")) %>%
+  right_join(data_wrangle, "Postcode") %>%
+  count(.by = lsoa11cd) %>%
+  left_join(imd, by = c(".by" = "LSOA code (2011)")) %>%
+  select(n, 
+         "lsoa" = `.by`,
+         "imd" = `Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOAs)`,
+         "income" = `Income Decile (where 1 is most deprived 10% of LSOAs)`,
+         "employment" = `Employment Decile (where 1 is most deprived 10% of LSOAs)`,
+         "education" = `Education, Skills and Training Decile (where 1 is most deprived 10% of LSOAs)`,
+         "health" = `Health Deprivation and Disability Decile (where 1 is most deprived 10% of LSOAs)`,
+         "crime" = `Crime Decile (where 1 is most deprived 10% of LSOAs)`,
+         "housing" = `Barriers to Housing and Services Decile (where 1 is most deprived 10% of LSOAs)`,
+         "environment" = `Living Environment Decile (where 1 is most deprived 10% of LSOAs)`
+         )
+
+data_imd %>%
+  pivot_longer(cols = c(imd, income, employment, education, health, crime, housing, environment),
+               names_to = "measure",
+               values_to = "decile"
+               ) %>%
+  ggplot(aes(n, decile)) +
+  geom_point() +
+  facet_wrap(~ measure)
+```
+
+```{r Map of Requests}
+data_spatial %>%
+  ggplot() +
+  geom_sf(mapping = aes(geometry = geometry, fill = total)) +
+   geom_sf_label(aes(geometry = geometry, label = Sprawl)) + 
+  theme_void() +
+  labs(fill = "Number of Requests")
+```
+
+```{r Client demographics}
+number_clients <- data_wrangle %>%
+  filter(Month == report_month) %>%
+  summarise(across(c(Adults, Children), sum, na.rm = TRUE)) 
+
+number_adults <- number_clients %>%
+  pull(Adults)
+
+number_children <- number_clients %>%
+  pull(Children)
+
+datebreaks <- seq(min(data_demo$Month), max(data_demo$Month), by = "month")
+
+data_demo %>%
+  ggplot(aes(Month, Total, group = Group, col = Group)) +
+  geom_line() + 
+  scale_x_date(breaks = datebreaks, labels = date_format("%b %Y")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+This month we fed `r number_adults` adults and `r number_children` children.
+
+```{r Frequent requesters}
+data %>%
+  count(.by = ID, name = "Number of Requests") %>%
+  rename("ID" = .by) %>%
+  arrange(desc(`Number of Requests`)) %>%
+  slice(1:10)
+```
+
+```{r New Clients}
+new_clients <- data_wrangle %>%
+  summarise("first_request_date" = min(as.Date(Date, format = "%d/%m/%Y"), na.rm = TRUE), .by = ID) %>%
+  filter(first_request_date > report_month) %>%
+  count() %>%
+  pull()
+```
+
+This month there were `r new_clients` new clients.
+
+```{r SPC chart}
+data_wrangle %>%
+  count(Month, name = "requests") %>%
+  ptd_spc(
+  value_field = requests,
+  date_field = Month,
+  improvement_direction = "decrease"
+  ) 
+```
+
+```{r Simulating data}
+weeks <- seq.Date(as.Date("2021-09-01"), as.Date("2023-09-01"), by = "weeks")
+
+set.seed(30)
+
+data_sim <- data.frame("week_commencing" = weeks) %>%
+  mutate("t" = row_number(),
+         "number_requests" = 100 + cos(2 * pi * t / 12) + 2 * t + rnorm(lengths(weeks), 0, 50),
+         "week" = as.factor(week_commencing),
+         "year" = as.factor(year(week_commencing)),
+         "day_of_year" = yday(week_commencing),
+         "quarter" = as.factor(quarter(week_commencing)),
+         "month" = as.factor(month(week_commencing)),
+         "week" = week(week_commencing)
+         )
+
+data_sim %>%
+  ptd_spc(
+    value_field = number_requests,
+    date_field = week_commencing,
+    improvement_direction = "decrease"
+    ) 
+```
+
+```{r Plotting requests over time}
+data_sim %>%
+  ggplot(aes(week_commencing, number_requests)) +
+  geom_line() +
+  ylab("Number of Requests")
+```
+
+
+
+```{r Time series modelling}
+
+# https://www.pluralsight.com/guides/machine-learning-for-time-series-data-in-r
+data_sim <- data_sim %>%
+  mutate("week" = as.factor(week_commencing),
+         "year" = as.factor(year(week_commencing)),
+         "day_of_year" = yday(week_commencing),
+         "quarter" = as.factor(quarter(week_commencing)),
+         "month" = as.factor(month(week_commencing)),
+         "week" = week(week_commencing)
+         )
+
+
+set.seed(19)
+
+# split the data into training (70%) and test set (30%)
+train <- data_sim %>% 
+  sample_frac(0.70)
+
+test <- data_sim %>%
+  anti_join(train, by = "t")
+
+
+# model evaluation metric
+mape <- function(actual,pred){
+
+  mape <- mean(abs((actual - pred)/actual))*100
+
+  return (mape)
+
+}
+
+# random forest
+
+set.seed(23)
+
+library(randomForest)
+
+mod <- randomForest(number_requests ~ year + day_of_year + quarter + month + week, 
+                   data = train
+                   )
+
+
+print(mod)
+
+predictions <- predict(mod, newdata = train)
+
+mape(train$number_requests, predictions)
+
+predictions <- predict(mod, newdata = test)
+
+mape(test$number_requests, predictions) 
+```
+
+```{r}
+# https://viz.datascience.arizona.edu/2021-time-series-intro/time-series-forecasting.html
+```
+```{r}
+# what makes a frequent client
+# number of adults, number of children
+# postcode
+# deprivation
+
+data_imd <- postcode_lsoa %>%
+  mutate(Postcode = pcds %>%
+           str_to_upper() %>%
+           str_replace_all(" ", "")) %>%
+  right_join(data_wrangle, "Postcode") %>%
+ # count(.by = lsoa11cd) %>%
+  left_join(imd, by = c("lsoa11cd" = "LSOA code (2011)")) %>%
+  select(ID,
+         Adults,
+         Children,
+         Postcode, 
+         Town,
+         "lsoa" = lsoa11cd,
+         "imd" = `Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOAs)`,
+         "income" = `Income Decile (where 1 is most deprived 10% of LSOAs)`,
+         "employment" = `Employment Decile (where 1 is most deprived 10% of LSOAs)`,
+         "education" = `Education, Skills and Training Decile (where 1 is most deprived 10% of LSOAs)`,
+         "health" = `Health Deprivation and Disability Decile (where 1 is most deprived 10% of LSOAs)`,
+         "crime" = `Crime Decile (where 1 is most deprived 10% of LSOAs)`,
+         "housing" = `Barriers to Housing and Services Decile (where 1 is most deprived 10% of LSOAs)`,
+         "environment" = `Living Environment Decile (where 1 is most deprived 10% of LSOAs)`
+         ) %>% 
+  unique()
+
+data_all <- data %>%
+  count(ID) %>%
+  inner_join(data_imd, "ID") %>%
+  mutate("Children" = ifelse(is.na(Children), 0, Children)) %>%
+  na.omit()
+
+set.seed(8)
+
+train <- data_all %>% 
+  sample_frac(0.70)
+
+test <- data_all %>%
+  anti_join(train, by = "ID")
+
+
+
+library(randomForest)
+
+set.seed(23)
+
+mod <- randomForest(n ~ Adults + Children + Town + Postcode + lsoa + imd 
+                    + income + employment + education + health + crime + housing + environment, 
+                   data = train
+                   )
+
+
+print(mod)
+```
+
+```{r}
+# Alice wants
+# - NUmber of adults/children this month
+# - Number of requests this month
+# - Comparison with previous month/year
+# - to be able to see where clients come from -
+# 
+# Would be good to have 
+# - Number of new clients?
+# - Idea of repeat requesters
+# 
+# what would be good to have
+# - idea of how many requests to expect -> prediction
+# - variations with season, day of week -> understanding
+```
+
