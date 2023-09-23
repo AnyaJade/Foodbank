@@ -4,6 +4,7 @@ output:
   flexdashboard::flex_dashboard:
     orientation: columns
     vertical_layout: fill
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -53,6 +54,17 @@ data_demo <- data_wrangle %>%
 ```
 
 
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+```{r}
+selectInput("variable", 
+            label = "Month",
+            choices = c("2023-05-08", "2023-05-15"),
+            selected = "2023-05-08"
+            )
+```
+
 Column {data-width=500}
 -----------------------------------------------------------------------
 
@@ -73,21 +85,35 @@ Column {data-width=500}
 ### Chart B
 
 ```{r}
-datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
-
-p <- data_demo %>%
+renderPlot({
+data_demo %>%
+    filter(Week >= input$variable) %>%
   ggplot(aes(Week, Total,col = Group)) +
-  geom_line() + 
-  scale_x_date(breaks = datebreaks) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  geom_line() #+
+  #scale_x_date(breaks = datebreaks) +
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+})
 
-ggplotly(p)
+
+
+
+# datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
+# 
+# p <- data_demo %>%
+#   ggplot(aes(Week, Total,col = Group)) +
+#   geom_line() + 
+#   scale_x_date(breaks = datebreaks) +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+# 
+# ggplotly(p)
 ```
 
 ### Chart C
 
 ```{r}
 # per month, number of requests, number of adults, number of children, number new requesters
+# monday, thursday, friday avg requests
+# way to filter date range - select weeks/months to view - last 12 weeks / last 3 months, ...
 first_requests <- data_wrangle %>%
   summarise("first_request" = min(Date, na.rm = FALSE), .by = "ID") %>%
   mutate("first_request_month" = floor_date(first_request, unit = "month")) %>%
