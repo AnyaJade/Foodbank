@@ -4,7 +4,6 @@ output:
   flexdashboard::flex_dashboard:
     orientation: columns
     vertical_layout: fill
-runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -54,17 +53,6 @@ data_demo <- data_wrangle %>%
 ```
 
 
-Column {.sidebar data-width=200}
------------------------------------------------------------------------
-
-```{r}
-selectInput("variable", 
-            label = "Month",
-            choices = c("2023-05-08", "2023-05-15"),
-            selected = "2023-05-08"
-            )
-```
-
 Column {data-width=500}
 -----------------------------------------------------------------------
 
@@ -85,27 +73,15 @@ Column {data-width=500}
 ### Chart B
 
 ```{r}
-renderPlot({
-data_demo %>%
-    filter(Week >= input$variable) %>%
+datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
+
+p <- data_demo %>%
   ggplot(aes(Week, Total,col = Group)) +
-  geom_line() #+
-  #scale_x_date(breaks = datebreaks) +
-  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-})
+  geom_line() + 
+  scale_x_date(breaks = datebreaks) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-
-
-
-# datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
-# 
-# p <- data_demo %>%
-#   ggplot(aes(Week, Total,col = Group)) +
-#   geom_line() + 
-#   scale_x_date(breaks = datebreaks) +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-# 
-# ggplotly(p)
+ggplotly(p)
 ```
 
 ### Chart C
