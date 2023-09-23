@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Foodbank"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -21,15 +21,6 @@ load("C:/Users/anyj1/OneDrive/Desktop/Foodbank/data.rda")
 
 # Shapefile of postcode boundaries from https://datashare.ed.ac.uk/handle/10283/2597
 data_boundaries <- sf::st_read("C:/Users/anyj1/Downloads/DS_10283_2597/GB_Postcodes/GB_Postcodes/PostalSector.shp")
-
-
-# # IMD from https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019
-# imd <- read_excel("C:/Users/anyj1/Downloads/File_2_-_IoD2019_Domains_of_Deprivation.xlsx", 
-#                   sheet = "IoD2019 Domains"
-#                   )
-# 
-# # Mapping between postcode and LSOA from https://geoportal.statistics.gov.uk/datasets/e7824b1475604212a2325cd373946235/about
-# postcode_lsoa <- read.csv("C:/Users/anyj1/Downloads/PCD_OA_LSOA_MSOA_LAD_MAY22_UK_LU.csv")
 ```
 
 ```{r Setting date variables, echo = FALSE}
@@ -59,44 +50,6 @@ data_spatial <- data_wrangle %>%
 data_demo <- data_wrangle %>%
   pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
   summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), .by = c(Week, Group))
-
-
-
-
-
-
-
-
-
-
-
-# data_imd <- postcode_lsoa  %>%
-#   mutate(Postcode = pcds %>%
-#            str_to_upper() %>%
-#            str_replace_all(" ", "")) %>%
-#   right_join(data_wrangle, "Postcode") %>%
-#   count(.by = lsoa11cd) %>%
-#   left_join(imd, by = c(".by" = "LSOA code (2011)")) %>%
-#   select(n, 
-#          "lsoa" = `.by`,
-#          "imd" = `Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "income" = `Income Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "employment" = `Employment Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "education" = `Education, Skills and Training Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "health" = `Health Deprivation and Disability Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "crime" = `Crime Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "housing" = `Barriers to Housing and Services Decile (where 1 is most deprived 10% of LSOAs)`,
-#          "environment" = `Living Environment Decile (where 1 is most deprived 10% of LSOAs)`
-#          )
-# 
-# data_imd %>%
-#   pivot_longer(cols = c(imd, income, employment, education, health, crime, housing, environment),
-#                names_to = "measure",
-#                values_to = "decile"
-#                ) %>%
-#   ggplot(aes(n, decile)) +
-#   geom_point() +
-#   facet_wrap(~ measure)
 ```
 
 
@@ -134,16 +87,22 @@ ggplotly(p)
 ### Chart C
 
 ```{r}
+# per month, number of requests, number of adults, number of children, number new requesters
+first_requests <- data_wrangle %>%
+  summarise("first_request" = min(Date, na.rm = FALSE), .by = "ID") %>%
+  mutate("first_request_month" = floor_date(first_request, unit = "month")) %>%
+  count(first_request_month, name = "First Requests")
 
-# per month, number of requests, number of adults, number of children, number new requesters, numer of unique requesters
+
 data_wrangle %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
             across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
             .by = Month
             ) %>%
+  left_join(first_requests, by = c("Month" = "first_request_month")) %>%
   arrange(desc(Month)) %>%
   mutate("Month" = format(Month, "%b %Y")) %>%
-  kable(booktabs = TRUE)
-
+  janitor::adorn_totals("row") %>%
+  kable(booktabs = TRUE) 
 ```
 
