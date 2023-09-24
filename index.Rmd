@@ -17,18 +17,21 @@ library(tidyverse)
 ```
 
 ```{r Reading in data, echo = FALSE, results = FALSE}
-load("C:/Users/anyj1/OneDrive/Desktop/Foodbank/data.rda")
+load("data.rda")
 
 # Shapefile of postcode boundaries from https://datashare.ed.ac.uk/handle/10283/2597
-data_boundaries <- sf::st_read("C:/Users/anyj1/Downloads/DS_10283_2597/GB_Postcodes/GB_Postcodes/PostalSector.shp")
+# will not read in if I move the file to other folder, will investigate but have used full path for now
+data_boundaries <- sf::st_read("C:/Users/anyj1/Downloads/DS_10283_2597/GB_Postcodes/GB_Postcodes/PostalSector.shp") 
 ```
 
-```{r Setting date variables, echo = FALSE}
-report_date <- Sys.Date()
-report_month <- floor_date(report_date, unit = "month")
-```
+```{r Setting date variables, echo = FALSE} 
+report_date <- Sys.Date() 
+
+report_month <- floor_date(report_date, unit = "month") 
+``` 
 
 ```{r Wrangling the data, echo = FALSE}
+# Formats dates and postcodes for later
 data_wrangle <- data %>%
   mutate("Date" = as.Date(Date, format = "%d/%m/%Y"),
          "Week" = floor_date(Date, unit = "week") + 1,
@@ -38,26 +41,24 @@ data_wrangle <- data %>%
            str_replace_all(" ", "") ,
          "postcode_format" = ifelse(nchar(Postcode) == 7,
                                     str_sub(Postcode, 1, 5),
-                                    str_sub(Postcode, 1, 4))
+                                    str_sub(Postcode, 1, 4)
+                                    )
          ) %>%
-  filter(Date < Sys.Date() & Date > as.Date("2023-04-01")) # data quality issues!
+  filter(Date < Sys.Date() & Date > as.Date("2023-04-01")) # data quality issues
+```
 
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Map of Requests
+```{r Map of Requests}
+# Adds spatial data for polygon plotting
 data_spatial <- data_wrangle %>%
   count(name = "total", .by = postcode_format) %>%
   rename("postcode_format" = `.by`) %>%
   left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
 
-data_demo <- data_wrangle %>%
-  pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
-  summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), .by = c(Week, Group))
-```
-
-
-Column {data-width=500}
------------------------------------------------------------------------
-
-### Chart A
-```{r Map of Requests}
+# Plotting the number of requests by region
 data_spatial %>%
   select(geometry, total, Sprawl) %>%
   ggplot() +
@@ -67,35 +68,16 @@ data_spatial %>%
   labs(fill = "Number of Requests")
 ```
 
-Column {data-width=500}
------------------------------------------------------------------------
+### Monthly summary
 
-### Chart B
-
-```{r}
-datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
-
-p <- data_demo %>%
-  ggplot(aes(Week, Total,col = Group)) +
-  geom_line() + 
-  scale_x_date(breaks = datebreaks) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-ggplotly(p)
-```
-
-### Chart C
-
-```{r}
-# per month, number of requests, number of adults, number of children, number new requesters
-# monday, thursday, friday avg requests
-# way to filter date range - select weeks/months to view - last 12 weeks / last 3 months, ...
+```{r Monthly summary table}
+# Finding how many new requests this month
 first_requests <- data_wrangle %>%
   summarise("first_request" = min(Date, na.rm = FALSE), .by = "ID") %>%
   mutate("first_request_month" = floor_date(first_request, unit = "month")) %>%
   count(first_request_month, name = "First Requests")
 
-
+# Creates a summary statistics table with a row for each month and a total row. Includes number of adults fed, number of children fed, number of requests made and number of first requests.
 data_wrangle %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
             across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
@@ -108,3 +90,74 @@ data_wrangle %>%
   kable(booktabs = TRUE) 
 ```
 
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Weekly requests
+
+```{r Weekly plot}
+# Finding how many adults and children fed each week
+data_demo <- data_wrangle %>%
+  pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
+  summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), 
+            .by = c(Week, Group)
+            )
+
+# Plots the number of adults and children fed per week:
+datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
+
+plot_demo <- data_demo %>%
+  ggplot(aes(Week, Total, col = Group)) +
+  geom_line() +
+  scale_x_date(breaks = datebreaks) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggplotly(plot_demo)
+```
+
+### SPC
+
+```{r Weekly SPC}
+data_wrangle %>%
+  count(Week, name = "Number of Requests") %>%
+  ptd_spc(
+    value_field = `Number of Requests`,
+    date_field = Week,
+    improvement_direction = "decrease"
+    )
+```
+
+
+```{r Notes, eval = FALSE}
+# Other things I'd like to add
+
+# should consider different days - monday, thursday or friday
+
+# Consider shiny - for example for when there is more data may want to filter date range - select certain weeks or months to view
+# If so, would use something like:
+#
+# runtime: shiny
+#
+# Column {.sidebar data-width=200}
+# -----------------------------------------------------------------------
+# 
+# months <- data_wrangle %>%
+#   pull(Month) %>%
+#   unique() 
+# 
+# selectInput("variable", 
+#             label = "Month",
+#             choices = months,
+#             selected = report_month
+#             )
+#
+# then like:
+# renderPlot({ 
+# data_demo %>%
+#     filter(Week >= input$variable) %>%
+#   ggplot(aes(Week, Total, col = Group)) +
+#   geom_line() #+
+#   #scale_x_date(breaks = datebreaks) +
+#   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+# })
+```
