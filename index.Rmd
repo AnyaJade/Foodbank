@@ -54,6 +54,7 @@ Column {data-width=500}
 ```{r Map of Requests}
 # Adds spatial data for polygon plotting
 data_spatial <- data_wrangle %>%
+  filter(Date > report_month) %>%
   count(name = "total", .by = postcode_format) %>%
   rename("postcode_format" = `.by`) %>%
   left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
@@ -77,7 +78,8 @@ first_requests <- data_wrangle %>%
   mutate("first_request_month" = floor_date(first_request, unit = "month")) %>%
   count(first_request_month, name = "First Requests")
 
-# Creates a summary statistics table with a row for each month and a total row. Includes number of adults fed, number of children fed, number of requests made and number of first requests.
+# Creates a summary statistics table with a row for each month and a total row. 
+# Includes number of adults fed, number of children fed, number of requests made and number of first requests.
 data_wrangle %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
             across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
@@ -87,7 +89,8 @@ data_wrangle %>%
   arrange(desc(Month)) %>%
   mutate("Month" = format(Month, "%b %Y")) %>%
   janitor::adorn_totals("row") %>%
-  kable(booktabs = TRUE) 
+  kable(booktabs = TRUE) %>%
+  kable_styling(full_width = TRUE)
 ```
 
 Column {data-width=500}
@@ -97,34 +100,33 @@ Column {data-width=500}
 
 ```{r Weekly plot}
 # Finding how many adults and children fed each week
-data_demo <- data_wrangle %>%
+data_age_group <- data_wrangle %>%
   pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
   summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), 
             .by = c(Week, Group)
             )
 
-# Plots the number of adults and children fed per week:
-datebreaks <- seq(min(data_demo$Week), max(data_demo$Week), by = "week")
-
-plot_demo <- data_demo %>%
+# Plots the number of adults and children fed per week
+plot_age_group <- data_age_group %>%
   ggplot(aes(Week, Total, col = Group)) +
   geom_line() +
-  scale_x_date(breaks = datebreaks) +
+  scale_x_date(breaks = date_breaks(width = "1 week")) +
+  theme_bw() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-ggplotly(plot_demo)
+ggplotly(plot_age_group)
 ```
 
 ### SPC
 
 ```{r Weekly SPC}
+# Plots SPC chart of weekly number of requests, where improvement is a decrease in the number of requests
 data_wrangle %>%
   count(Week, name = "Number of Requests") %>%
-  ptd_spc(
-    value_field = `Number of Requests`,
-    date_field = Week,
-    improvement_direction = "decrease"
-    )
+  ptd_spc(value_field = `Number of Requests`,
+          date_field = Week,
+          improvement_direction = "decrease"
+          )
 ```
 
 
@@ -153,11 +155,11 @@ data_wrangle %>%
 #
 # then like:
 # renderPlot({ 
-# data_demo %>%
+# data_age_group %>%
 #     filter(Week >= input$variable) %>%
 #   ggplot(aes(Week, Total, col = Group)) +
 #   geom_line() #+
-#   #scale_x_date(breaks = datebreaks) +
+#   #scale_x_date(breaks = date_breaks(width = "1 week")) +
 #   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 # })
 ```
