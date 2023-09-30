@@ -4,6 +4,7 @@ output:
   flexdashboard::flex_dashboard:
     orientation: columns
     vertical_layout: fill
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -19,9 +20,12 @@ library(tidyverse)
 ```{r Reading in data, echo = FALSE, results = FALSE}
 load("data.rda")
 
-# Shapefile of postcode boundaries from https://datashare.ed.ac.uk/handle/10283/2597
-# will not read in if I move the file to other folder, will investigate but have used full path for now
-data_boundaries <- sf::st_read("C:/Users/anyj1/Downloads/DS_10283_2597/GB_Postcodes/GB_Postcodes/PostalSector.shp") 
+# Shapefile of postcode boundaries from: 
+  # https://datashare.ed.ac.uk/handle/10283/2597
+# file will not read in if I move the file to other folder
+data_boundaries <- sf::st_read(
+  "C:/Users/anyj1/Downloads/GB_Postcodes/PostalSector.shp"
+  ) 
 ```
 
 ```{r Setting date variables, echo = FALSE} 
@@ -47,28 +51,79 @@ data_wrangle <- data %>%
   filter(Date < Sys.Date() & Date > as.Date("2023-04-01")) # data quality issues
 ```
 
+Map
+===
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+```{r}
+months <- data_wrangle %>%
+  pull(Month) %>%
+  unique() %>%
+  format("%b %Y") %>%
+  as.character()
+
+selectInput("variable",
+            label = "Month",
+            choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
+            selected = report_month
+            )
+```
+
+
+
 Column {data-width=500}
 -----------------------------------------------------------------------
 
 ### Map of Requests
 ```{r Map of Requests}
-# Adds spatial data for polygon plotting
-data_spatial <- data_wrangle %>%
-  filter(Date > report_month) %>%
-  count(name = "total", .by = postcode_format) %>%
-  rename("postcode_format" = `.by`) %>%
-  left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
-
 # Plotting the number of requests by region
-data_spatial %>%
-  select(geometry, total, Sprawl) %>%
-  ggplot() +
-  geom_sf(mapping = aes(geometry = geometry, fill = total)) +
-  geom_sf_label(aes(geometry = geometry, label = Sprawl)) + 
-  theme_void() +
-  labs(fill = "Number of Requests")
+renderPlot({
+  # Adds spatial data for polygon plotting
+  
+  data_spatial <- data_wrangle %>%
+    mutate("input_variable_mod" = ifelse(grepl("20", input$variable), 
+                                         lubridate::my(input$variable), 
+                                         NA
+                                         )
+           ) %>%
+    filter(case_when(input$variable == "Last 3 months" 
+                       ~ Month > report_month - months(3),
+                     input$variable == "Last 6 months" 
+                       ~ Month > report_month - months(6),
+                     input$variable == "Last 12 months" 
+                       ~ Month > report_month - years(1),
+                     input$variable == "All time"
+                       ~ Month > as.Date("2000-01-01"),
+                     TRUE ~ Month == input_variable_mod
+                     )
+           ) %>%
+    count(name = "total", .by = postcode_format) %>%
+    rename("postcode_format" = `.by`) %>%
+    left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
+  
+  data_spatial %>%
+    select(geometry, total, Sprawl) %>%
+    mutate("label" = paste(Sprawl, "\n", total)) %>%
+    ggplot() +
+    geom_sf(mapping = aes(geometry = geometry, fill = total)) +
+  #  scale_fill_viridis_c(option = "plasma")+
+    geom_sf_label(aes(geometry = geometry, label = label)) + 
+    theme_void() +
+    labs(fill = "Number of Requests") 
+  
+  }
+  
+)
 ```
 
+
+Monthly Summary
+===
+
+Column {data-height=350}
+-------------------------------------
 ### Monthly summary
 
 ```{r Monthly summary table}
@@ -79,54 +134,201 @@ first_requests <- data_wrangle %>%
   count(first_request_month, name = "First Requests")
 
 # Creates a summary statistics table with a row for each month and a total row. 
-# Includes number of adults fed, number of children fed, number of requests made and number of first requests.
-data_wrangle %>%
+# Includes number of adults fed, number of children fed, number of requests made 
+  # and number of first requests.
+data_monthly <- data_wrangle %>%
+  filter(Month >= report_month - months(13)) %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
             across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
             .by = Month
             ) %>%
   left_join(first_requests, by = c("Month" = "first_request_month")) %>%
-  arrange(desc(Month)) %>%
+  arrange(desc(Month))  
+
+data_monthly %>%
   mutate("Month" = format(Month, "%b %Y")) %>%
   janitor::adorn_totals("row") %>%
   kable(booktabs = TRUE) %>%
   kable_styling(full_width = TRUE)
 ```
 
-Column {data-width=500}
+Column {data-height=350}
+-------------------------------------
+
+### Adults and Children
+
+```{r}
+plot_monthly_age <- data_monthly %>%
+  pivot_longer(cols = c(Adults, Children),
+               names_to = "Group",
+               values_to = "Value"
+               ) %>%
+  ggplot(aes(Month, Value, group = Group, col = Group)) +
+  geom_line() +
+  theme_bw() +
+  ylab("Number")
+
+ggplotly(plot_monthly_age)
+```
+
+### Monthly Requests
+
+```{r}
+plot_monthly_requests <- data_monthly %>%
+  pivot_longer(cols = c(Requests, `First Requests`),
+               names_to = "Group",
+               values_to = "Value"
+               ) %>%
+  ggplot(aes(Month, Value, fill = Group)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  ylab("Number")
+
+ggplotly(plot_monthly_requests)
+```
+
+
+
+Weekly charts
+===
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+### Weekly summary
+
+```{r}
+months <- data_wrangle %>%
+  pull(Month) %>%
+  unique() %>%
+  format("%b %Y") %>%
+  as.character()
+
+selectInput("variable2",
+            label = "Month",
+            choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
+            selected = report_month
+            )
+```
+
+
+Column {data-width=400}
 -----------------------------------------------------------------------
 
 ### Weekly requests
 
 ```{r Weekly plot}
-# Finding how many adults and children fed each week
-data_age_group <- data_wrangle %>%
-  pivot_longer(names_to = "Group", values_to = "Number", cols = c(Adults, Children)) %>%
-  summarise("Total" = sum(as.numeric(Number), na.rm = TRUE), 
-            .by = c(Week, Group)
-            )
+data_weekly <- data_wrangle %>%
+  summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
+            across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
+            .by = Week
+            ) 
 
-# Plots the number of adults and children fed per week
-plot_age_group <- data_age_group %>%
-  ggplot(aes(Week, Total, col = Group)) +
-  geom_line() +
-  scale_x_date(breaks = date_breaks(width = "1 week")) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-ggplotly(plot_age_group)
+renderPlotly(
+  
+  {
+    
+    ggplotly(data_weekly %>%
+               select(-Requests) %>%
+               pivot_longer(c(Adults, Children),
+                            names_to = "Group",
+                            values_to = "Total"
+                            ) %>%
+               mutate("input_variable_mod" = ifelse(grepl("20", input$variable2),
+                                                    lubridate::my(input$variable2), 
+                                                    NA
+                                                    )
+                      ) %>%
+               filter(case_when(input$variable2 == "Last 3 months" 
+                                  ~ Week > report_month - months(3),
+                                input$variable2 == "Last 6 months" 
+                                  ~ Week > report_month - months(6),
+                                input$variable2 == "Last 12 months" 
+                                  ~ Week > report_month - years(1),
+                                input$variable2 == "All time"
+                                  ~ Week > as.Date("2000-01-01"),
+                                TRUE ~ Week >= input_variable_mod
+                                )
+                      ) %>%
+               ggplot(aes(Week, Total, col = Group)) +
+               geom_line() +
+               scale_x_date(breaks = date_breaks(width = "1 week")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(angle = 45, 
+                                                vjust = 0.5, 
+                                                hjust = 1
+                                                )
+                     )
+             )
+    }
+  
+)
 ```
 
 ### SPC
 
 ```{r Weekly SPC}
-# Plots SPC chart of weekly number of requests, where improvement is a decrease in the number of requests
-data_wrangle %>%
-  count(Week, name = "Number of Requests") %>%
-  ptd_spc(value_field = `Number of Requests`,
-          date_field = Week,
-          improvement_direction = "decrease"
-          )
+# Plots SPC chart of weekly number of requests, where improvement is a decrease 
+  # in the number of requests
+renderPlotly(
+  {
+    
+    data_weekly %>%
+      ptd_spc(value_field = Requests,
+              date_field = Week,
+              improvement_direction = "decrease"
+              ) %>%
+      ptd_create_plotly(point_size = 2)
+    
+  }
+)
+```
+
+Column {data-width=100}
+-----------------------------------------------------------------------
+
+```{r Weekly averages}
+
+renderTable(
+  {
+    
+    data_weekly %>%
+      mutate("input_variable_mod" = ifelse(grepl("20", input$variable2),
+                                           lubridate::my(input$variable2), 
+                                           NA
+                                           )
+             ) %>%
+      filter(case_when(input$variable2 == "Last 3 months" 
+                         ~ Week > report_month - months(3),
+                       input$variable2 == "Last 6 months" 
+                         ~ Week > report_month - months(6),
+                       input$variable2 == "Last 12 months" 
+                         ~ Week > report_month - years(1),
+                       input$variable2 == "All time"
+                         ~ Week > as.Date("2000-01-01"),
+                       TRUE ~ Week >= input_variable_mod
+                       )
+             ) %>%
+      pivot_longer(cols = c(Adults, Children, Requests),
+                   names_to = "Group",
+                   values_to = "value") %>%
+      summarise("Mean" = mean(value) %>% round(2),
+                "sd" = sd(value) %>% round(2),
+                "Median" = median(value),
+                "Min" = min(value),
+                "Max" = max(value),
+                .by = Group
+                ) 
+    
+    }
+  
+  )
+```
+
+### Days
+
+```{r}
+#Monday, Friday
 ```
 
 
@@ -135,31 +337,13 @@ data_wrangle %>%
 
 # should consider different days - monday, thursday or friday
 
-# Consider shiny - for example for when there is more data may want to filter date range - select certain weeks or months to view
+# Consider shiny - for example for when there is more data may want to filter 
+  # date range - select certain weeks or months to view
 # If so, would use something like:
 #
-# runtime: shiny
-#
-# Column {.sidebar data-width=200}
-# -----------------------------------------------------------------------
 # 
-# months <- data_wrangle %>%
-#   pull(Month) %>%
-#   unique() 
-# 
-# selectInput("variable", 
-#             label = "Month",
-#             choices = months,
-#             selected = report_month
-#             )
 #
-# then like:
-# renderPlot({ 
-# data_age_group %>%
-#     filter(Week >= input$variable) %>%
-#   ggplot(aes(Week, Total, col = Group)) +
-#   geom_line() #+
-#   #scale_x_date(breaks = date_breaks(width = "1 week")) +
-#   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-# })
+
+# 
+
 ```
