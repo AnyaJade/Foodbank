@@ -13,19 +13,52 @@ library(kableExtra)
 library(lubridate)
 library(NHSRplotthedots)
 library(plotly)
+library(readxl)
 library(scales) 
 library(tidyverse) 
 ```
 
 ```{r Reading in data, echo = FALSE, results = FALSE}
-load("data.rda")
 
-# Shapefile of postcode boundaries from: 
-  # https://datashare.ed.ac.uk/handle/10283/2597
-# file will not read in if I move the file to other folder
-data_boundaries <- sf::st_read(
-  "C:/Users/anyj1/Downloads/GB_Postcodes/PostalSector.shp"
-  ) 
+filename <- "C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx"
+
+if(file.exists(filename)) {
+  
+  data_base_details <- read_excel(filename,
+                                  sheet = "Details"
+                                  )
+
+data_base_requests <- read_excel(filename,
+                                 sheet = "Requests"
+                                 )
+
+ data <- data_base_details %>%
+   mutate("ID" = row_number(),
+          "Adults" = as.numeric(str_sub(Adults, 1, 1)),
+          "Children" = as.numeric(str_sub(Children, 1, 1))
+          ) %>%
+   left_join(data_base_requests, by = c("Surname", "First names")) %>%
+   select(ID, Town, Postcode, Adults, Children, Date) 
+ 
+ # Shapefile of postcode boundaries from: 
+    # https://datashare.ed.ac.uk/handle/10283/2597
+  # file will not read in if I move the file to other folder
+  data_boundaries <- sf::st_read(
+    "C:/Users/ridge/Downloads/GB_Postcodes/GB_Postcodes/PostalSector.shp"
+  )
+ 
+}else{
+  
+  load("data.rda")
+  
+  # Shapefile of postcode boundaries from: 
+    # https://datashare.ed.ac.uk/handle/10283/2597
+  # file will not read in if I move the file to other folder
+  data_boundaries <- sf::st_read(
+    "C:/Users/anyj1/Downloads/GB_Postcodes/PostalSector.shp"
+    ) 
+  
+}
 ```
 
 ```{r Setting date variables, echo = FALSE} 
@@ -67,7 +100,9 @@ months <- data_wrangle %>%
 selectInput("variable",
             label = "Month",
             choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
-            selected = report_month
+            selected = report_month %>%
+              format("%b %Y") %>%
+              as.character()
             )
 ```
 
@@ -207,7 +242,9 @@ months <- data_wrangle %>%
 selectInput("variable2",
             label = "Month",
             choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
-            selected = report_month
+            selected = report_month %>%
+              format("%b %Y") %>%
+              as.character()
             )
 ```
 
