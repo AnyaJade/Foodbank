@@ -59,6 +59,8 @@ data_base_requests <- read_excel(filename,
     ) 
   
 }
+
+data_historic <- read_excel("historic_data.xlsx")
 ```
 
 ```{r Setting date variables, echo = FALSE} 
@@ -90,14 +92,14 @@ Map
 Column {.sidebar data-width=200}
 -----------------------------------------------------------------------
 
-```{r}
+```{r Dropdown for map}
 months <- data_wrangle %>%
   pull(Month) %>%
   unique() %>%
   format("%b %Y") %>%
   as.character()
 
-selectInput("variable",
+selectInput("variable_map",
             label = "Month",
             choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
             selected = report_month %>%
@@ -118,20 +120,20 @@ renderPlot({
   # Adds spatial data for polygon plotting
   
   data_spatial <- data_wrangle %>%
-    mutate("input_variable_mod" = ifelse(grepl("20", input$variable), 
-                                         lubridate::my(input$variable), 
+    mutate("input_variable_map_mod" = ifelse(grepl("20", input$variable_map), 
+                                         lubridate::my(input$variable_map), 
                                          NA
                                          )
            ) %>%
-    filter(case_when(input$variable == "Last 3 months" 
+    filter(case_when(input$variable_map == "Last 3 months" 
                        ~ Month > report_month - months(3),
-                     input$variable == "Last 6 months" 
+                     input$variable_map == "Last 6 months" 
                        ~ Month > report_month - months(6),
-                     input$variable == "Last 12 months" 
+                     input$variable_map == "Last 12 months" 
                        ~ Month > report_month - years(1),
-                     input$variable == "All time"
+                     input$variable_map == "All time"
                        ~ Month > as.Date("2000-01-01"),
-                     TRUE ~ Month == input_variable_mod
+                     TRUE ~ Month == input_variable_map_mod
                      )
            ) %>%
     count(name = "total", .by = postcode_format) %>%
@@ -156,10 +158,28 @@ renderPlot({
 
 Monthly Summary
 ===
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+```{r Drop down for monthly}
+months <- data_wrangle %>%
+  pull(Month) %>%
+  unique() %>%
+  format("%b %Y") %>%
+  as.character()
+
+selectInput("variable_month",
+            label = "Month",
+            choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
+            selected = "Last 12 months"
+            )
+```
 
 Column {data-height=350}
 -------------------------------------
 ### Monthly summary
+
+
 
 ```{r Monthly summary table}
 # Finding how many new requests this month
@@ -171,55 +191,134 @@ first_requests <- data_wrangle %>%
 # Creates a summary statistics table with a row for each month and a total row. 
 # Includes number of adults fed, number of children fed, number of requests made 
   # and number of first requests.
+data_historic_month <- data_historic %>%
+  filter(Date < as.Date("2023-04-01")) %>%
+  mutate("Month" = floor_date(Date, unit = "month")) %>%
+  summarise(across(.cols = c(Adults, Children, Households), 
+                   .fns = ~ sum(., na.rm = TRUE)
+                   ),
+            .by = Month
+            ) %>%
+  mutate(Requests = NA, `First Requests` = NA)
+
 data_monthly <- data_wrangle %>%
+  select(Month, Adults, Children, ID, Date) %>%
   filter(Month >= report_month - months(13)) %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
-            across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
+            across(.cols = ID, .fns = ~ n_distinct(.), .names = "Households"),
+            across(.cols = Date, .fns = ~ n(), .names = "Requests"),
             .by = Month
             ) %>%
   left_join(first_requests, by = c("Month" = "first_request_month")) %>%
+  rbind(data_historic_month) %>%
   arrange(desc(Month))  
 
-data_monthly %>%
-  mutate("Month" = format(Month, "%b %Y")) %>%
-  janitor::adorn_totals("row") %>%
-  kable(booktabs = TRUE) %>%
-  kable_styling(full_width = TRUE)
+
+renderTable(
+  {
+
+  data_monthly %>%
+        mutate("input_variable_mod" = ifelse(grepl("20", input$variable_month),
+                                             lubridate::my(input$variable_month), 
+                                             NA
+                                             )
+               ) %>%
+        filter(case_when(input$variable_month == "Last 3 months" 
+                           ~ Month > report_month - months(3),
+                         input$variable_month == "Last 6 months" 
+                           ~ Month > report_month - months(6),
+                         input$variable_month == "Last 12 months" 
+                           ~ Month > report_month - years(1),
+                         input$variable_month == "All time"
+                           ~ Month > as.Date("2000-01-01"),
+                         TRUE ~ Month >= input_variable_mod
+                         )
+               ) %>%
+    mutate("Month" = format(Month, "%b %Y")) %>%
+    janitor::adorn_totals("row") %>%
+    select(-input_variable_mod)
+    
+  }
+
+)
 ```
 
 Column {data-height=350}
 -------------------------------------
 
-### Adults and Children
+### Adults, Children and Households
 
-```{r}
-plot_monthly_age <- data_monthly %>%
-  pivot_longer(cols = c(Adults, Children),
-               names_to = "Group",
-               values_to = "Value"
-               ) %>%
-  ggplot(aes(Month, Value, group = Group, col = Group)) +
-  geom_line() +
-  theme_bw() +
-  ylab("Number")
-
-ggplotly(plot_monthly_age)
+```{r Plot monthly group}
+renderPlotly(
+  
+    {ggplotly(data_monthly %>%
+                mutate("input_variable_mod" = ifelse(grepl("20", input$variable_month),
+                                                     lubridate::my(input$variable_month), 
+                                                     NA
+                                                     )
+                       ) %>%
+                filter(case_when(input$variable_month == "Last 3 months" 
+                                   ~ Month > report_month - months(3),
+                                 input$variable_month == "Last 6 months" 
+                                   ~ Month > report_month - months(6),
+                                 input$variable_month == "Last 12 months" 
+                                   ~ Month > report_month - years(1),
+                                 input$variable_month == "All time"
+                                   ~ Month > as.Date("2000-01-01"),
+                                 TRUE ~ Month >= input_variable_mod
+                                 )
+                       ) %>%
+                pivot_longer(cols = c(Adults, Children, Households),
+                             names_to = "Group",
+                             values_to = "Value"
+                             ) %>%
+                ggplot(aes(Month, Value, group = Group, col = Group)) +
+                geom_line() +
+                theme_bw() +
+                ylab("Number"))
+      
+        }
+    
+    )
 ```
 
 ### Monthly Requests
 
-```{r}
-plot_monthly_requests <- data_monthly %>%
-  pivot_longer(cols = c(Requests, `First Requests`),
-               names_to = "Group",
-               values_to = "Value"
-               ) %>%
-  ggplot(aes(Month, Value, fill = Group)) +
-  geom_bar(stat = "identity") +
-  theme_bw() +
-  ylab("Number")
-
-ggplotly(plot_monthly_requests)
+```{r Plot monthly request type}
+renderPlotly(
+  
+    {
+      
+      ggplotly(
+        plot_monthly_requests <- data_monthly %>%
+          mutate("input_variable_mod" = ifelse(grepl("20", input$variable_month),
+                                               lubridate::my(input$variable_month), 
+                                               NA
+                                               )
+                 ) %>%
+          filter(case_when(input$variable_month == "Last 3 months" 
+                             ~ Month > report_month - months(3),
+                           input$variable_month == "Last 6 months" 
+                             ~ Month > report_month - months(6),
+                           input$variable_month == "Last 12 months" 
+                             ~ Month > report_month - years(1),
+                           input$variable_month == "All time"
+                             ~ Month > as.Date("2000-01-01"),
+                           TRUE ~ Month >= input_variable_mod
+                           )
+                 ) %>%
+          pivot_longer(cols = c(Requests, `First Requests`),
+                       names_to = "Group",
+                       values_to = "Value"
+                       ) %>%
+          ggplot(aes(Month, Value, fill = Group)) +
+          geom_bar(stat = "identity") +
+          theme_bw() +
+          ylab("Number") + scale_fill_manual(values = c("#E69F00", "#CC79A7")))
+      
+        }
+    
+    )
 ```
 
 
@@ -230,21 +329,19 @@ Weekly charts
 Column {.sidebar data-width=200}
 -----------------------------------------------------------------------
 
-### Weekly summary
 
-```{r}
+
+```{r Drop down for weekly}
 months <- data_wrangle %>%
   pull(Month) %>%
   unique() %>%
   format("%b %Y") %>%
   as.character()
 
-selectInput("variable2",
+selectInput("variable_week",
             label = "Month",
             choices = c(months, "Last 3 months", "Last 6 months", "Last 12 months", "All time"),
-            selected = report_month %>%
-              format("%b %Y") %>%
-              as.character()
+            selected = "Last 3 months"
             )
 ```
 
@@ -257,7 +354,8 @@ Column {data-width=400}
 ```{r Weekly plot}
 data_weekly <- data_wrangle %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
-            across(.cols = c(Date), .fns = ~ n(), .names = "Requests"),
+            across(.cols = ID, .fns = ~ n_distinct(.), .names = "Households"),
+            across(.cols = Date, .fns = ~ n(), .names = "Requests"),
             .by = Week
             ) 
 
@@ -267,22 +365,22 @@ renderPlotly(
     
     ggplotly(data_weekly %>%
                select(-Requests) %>%
-               pivot_longer(c(Adults, Children),
+               pivot_longer(c(Adults, Children, Households),
                             names_to = "Group",
                             values_to = "Total"
                             ) %>%
-               mutate("input_variable_mod" = ifelse(grepl("20", input$variable2),
-                                                    lubridate::my(input$variable2), 
+               mutate("input_variable_mod" = ifelse(grepl("20", input$variable_week),
+                                                    lubridate::my(input$variable_week), 
                                                     NA
                                                     )
                       ) %>%
-               filter(case_when(input$variable2 == "Last 3 months" 
+               filter(case_when(input$variable_week == "Last 3 months" 
                                   ~ Week > report_month - months(3),
-                                input$variable2 == "Last 6 months" 
+                                input$variable_week == "Last 6 months" 
                                   ~ Week > report_month - months(6),
-                                input$variable2 == "Last 12 months" 
+                                input$variable_week == "Last 12 months" 
                                   ~ Week > report_month - years(1),
-                                input$variable2 == "All time"
+                                input$variable_week == "All time"
                                   ~ Week > as.Date("2000-01-01"),
                                 TRUE ~ Week >= input_variable_mod
                                 )
@@ -330,23 +428,23 @@ renderTable(
   {
     
     data_weekly %>%
-      mutate("input_variable_mod" = ifelse(grepl("20", input$variable2),
-                                           lubridate::my(input$variable2), 
+      mutate("input_variable_mod" = ifelse(grepl("20", input$variable_week),
+                                           lubridate::my(input$variable_week), 
                                            NA
                                            )
              ) %>%
-      filter(case_when(input$variable2 == "Last 3 months" 
+      filter(case_when(input$variable_week == "Last 3 months" 
                          ~ Week > report_month - months(3),
-                       input$variable2 == "Last 6 months" 
+                       input$variable_week == "Last 6 months" 
                          ~ Week > report_month - months(6),
-                       input$variable2 == "Last 12 months" 
+                       input$variable_week == "Last 12 months" 
                          ~ Week > report_month - years(1),
-                       input$variable2 == "All time"
+                       input$variable_week == "All time"
                          ~ Week > as.Date("2000-01-01"),
                        TRUE ~ Week >= input_variable_mod
                        )
              ) %>%
-      pivot_longer(cols = c(Adults, Children, Requests),
+      pivot_longer(cols = c(Adults, Children, Households, Requests),
                    names_to = "Group",
                    values_to = "value") %>%
       summarise("Mean" = mean(value) %>% round(2),
