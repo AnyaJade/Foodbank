@@ -472,13 +472,10 @@ renderTable(
 
 # should consider different days - monday, thursday or friday
 
-# Consider shiny - for example for when there is more data may want to filter 
-  # date range - select certain weeks or months to view
-# If so, would use something like:
-#
-# 
-#
+# Date last refreshed
 
-# 
+# Notes/explanations?
+
+# Percentage increase
 
 ```
