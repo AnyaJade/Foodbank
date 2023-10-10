@@ -464,6 +464,19 @@ renderTable(
 
 ```{r}
 #Monday, Friday
+renderPlotly(
+  {
+    ggplotly(data_wrangle %>%
+  mutate("Day" = wday(Date, label = TRUE)) %>%
+  summarise(n(), .by = c(Day, Month)) %>%
+  summarise("Median" = median(`n()`), .by = Day) %>%
+  ggplot(aes(Day, Median, fill = Day)) +
+  geom_bar(stat = "identity") +
+    theme_bw())
+    
+  }
+  )
+
 ```
 
 
