@@ -5,34 +5,6 @@ library("tidyverse")
 library("readxl") 
 library("openxlsx")
 
-# data_base_requests2 <- read_excel("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
-#                                                                    sheet = "Requests",
-#                                                                     col_types = c("text", "text", "date")
-#                                    )
-# 
-#  data_base_requests2 <- data_base_requests2 %>% na.omit()%>% mutate(Date = format(Date, "%d/%m/%Y"))
-# 
-# data_base_requests <- read_excel("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
-#                                                               sheet = "Requests",
-#                                                               col_types = c("text", "text", "text")
-#                                                               ) %>% filter(grepl("/",Date)) %>% rbind(data_base_requests2)
-# 
-# wb_database <- loadWorkbook("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx")
-# 
-# writeData(wb = wb_database,
-#           sheet = "Requests",
-#           x = data_base_requests,
-#           startRow = 2,
-#           startCol = 2,
-#           colNames = FALSE
-# )
-# 
-# saveWorkbook(wb = wb_database,
-#              file = "C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
-#              overwrite = TRUE
-# )
-
-
 
 #### 1 ####
 # To update database with other information
@@ -83,7 +55,7 @@ new_requests <- data_packing_requests %>%
 
 # Updating database with unique new requests
 data_requests_updated <- data_base_requests %>%
-  mutate(Date = ifelse(grepl("/", Date), Date, format(as.Date(as.numeric(Date)), "%d/%m/%Y"))) %>%
+  mutate(Date = ifelse(grepl("/", Date), Date, format(as.Date(as.numeric(Date)-1), "%d/%m/%Y"))) %>%
   mutate(Date = str_replace(Date, "209", "202")) %>%
   rbind(new_requests) %>%
   unique() %>%
@@ -165,6 +137,22 @@ saveWorkbook(wb = wb_packing,
              )
 
 # Check freeze rows
+data_requests_updated_day <- data_requests_updated %>%
+  mutate("day" = wday(Date), # need to add 1
+         "Month" = month(Date))
 
+wb <- createWorkbook()
 
+addWorksheet(wb, "Requests")
+
+writeData(wb = wb,
+          sheet = "Requests",
+          x = data_requests_updated_day,
+          colNames = TRUE
+)
+
+saveWorkbook(wb = wb,
+             file = "C:/Users/ridge/OneDrive/Documents/Anya/Database_day.xlsx",
+             overwrite = TRUE
+)
 
