@@ -137,22 +137,4 @@ saveWorkbook(wb = wb_packing,
              )
 
 # Check freeze rows
-data_requests_updated_day <- data_requests_updated %>%
-  mutate("day" = wday(Date), # need to add 1
-         "Month" = month(Date))
-
-wb <- createWorkbook()
-
-addWorksheet(wb, "Requests")
-
-writeData(wb = wb,
-          sheet = "Requests",
-          x = data_requests_updated_day,
-          colNames = TRUE
-)
-
-saveWorkbook(wb = wb,
-             file = "C:/Users/ridge/OneDrive/Documents/Anya/Database_day.xlsx",
-             overwrite = TRUE
-)
 
