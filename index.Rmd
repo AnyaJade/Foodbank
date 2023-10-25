@@ -326,66 +326,52 @@ renderPlotly(
 Weekly SPC charts
 ===
 
+
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+```{r Dropdown for SPC}
+selectInput("variable_spc",
+            label = "Metric",
+            choices = c("Adults", "Children", "Households", "Requests"),
+            selected = "Adults"
+            )
+```
+
 Column {data-width=400}
 -----------------------------------------------------------------------
 
 ```{r Weekly plot}
 ### Weekly requests
+data_historic_week <- data_historic %>%
+  filter(Date < as.Date("2023-04-01")) %>%
+  mutate("Week" = floor_date(Date, unit = "week") + days(1)) %>%
+  summarise(across(.cols = c(Adults, Children, Households), 
+                   .fns = ~ sum(., na.rm = TRUE)
+                   ),
+            .by = Week
+            ) %>%
+  mutate(Requests = NA)
 
 data_weekly <- data_wrangle %>%
   summarise(across(.cols = c(Adults, Children), .fns = ~ sum(., na.rm = TRUE)),
             across(.cols = ID, .fns = ~ n_distinct(.), .names = "Households"),
             across(.cols = Date, .fns = ~ n(), .names = "Requests"),
             .by = Week
-            ) 
+            ) %>%
+  rbind(data_historic_week)
 
-# renderPlotly(
-#   
-#   {
-#     
-#     ggplotly(data_weekly %>%
-#                select(-Requests) %>%
-#                pivot_longer(c(Adults, Children, Households),
-#                             names_to = "Group",
-#                             values_to = "Total"
-#                             ) %>%
-#                mutate("input_variable_mod" = ifelse(grepl("20", input$variable_week),
-#                                                     lubridate::my(input$variable_week), 
-#                                                     NA
-#                                                     )
-#                       ) %>%
-#                filter(case_when(input$variable_week == "Last 3 months" 
-#                                   ~ Week > report_month - months(3),
-#                                 input$variable_week == "Last 6 months" 
-#                                   ~ Week > report_month - months(6),
-#                                 input$variable_week == "Last 12 months" 
-#                                   ~ Week > report_month - years(1),
-#                                 input$variable_week == "All time"
-#                                   ~ Week > as.Date("2000-01-01"),
-#                                 TRUE ~ Week >= input_variable_mod
-#                                 )
-#                       ) %>%
-#                ggplot(aes(Week, Total, col = Group)) +
-#                geom_line() +
-#                scale_x_date(breaks = date_breaks(width = "1 week")) +
-#                theme_bw() +
-#                theme(axis.text.x = element_text(angle = 45, 
-#                                                 vjust = 0.5, 
-#                                                 hjust = 1
-#                                                 )
-#                      )
-#              )
-#     }
-#   
-# )
+data_weekly_spc <- data_weekly %>%
+  filter(Week < report_month)
 ```
 
 ### SPC for Number of Adults
 ```{r Weekly SPC}
 renderPlotly(
   {
-    data_weekly %>%
-      ptd_spc(value_field = Adults,
+    data_weekly_spc %>%
+      ptd_spc(value_field = !!sym(input$variable_spc),
               date_field = Week,
               improvement_direction = "decrease"
               ) %>%
@@ -396,65 +382,22 @@ renderPlotly(
 )
 ```
 
-### SPC for Number of Children
-```{r Weekly SPC Children}
-renderPlotly(
-  
-  {
-    
-    data_weekly %>%
-      ptd_spc(value_field = Children,
-              date_field = Week,
-              improvement_direction = "decrease"
-              ) %>%
-      ptd_create_plotly(point_size = 2)
-    
-  }
-  
-)
-```
-
-Column {data-width=400}
+Column {data-width=100}
 -----------------------------------------------------------------------
 
-### SPC for Number of Households
-```{r Weekly SPC Households}
-renderPlotly(
-  
-  {
-    
-    data_weekly %>%
-      ptd_spc(value_field = Households,
-              date_field = Week,
-              improvement_direction = "decrease"
-              ) %>%
-      ptd_create_plotly(point_size = 2)
-    
-  }
-  
-)
-```
+SPC chart for Requests is still in development.
 
-### SPC for Number of Requests
-```{r Weekly SPC Requests}
-renderPlotly(
-  
-  {
-    
-    data_weekly %>%
-      ptd_spc(value_field = Requests,
-              date_field = Week,
-              improvement_direction = "decrease"
-              ) %>%
-      ptd_create_plotly(point_size = 2)
-    
-  }
-  
-)
+For more information on SPC please see:
+```{r}
+cat(str_replace_all("C://Users/ridge/OneDrive/Documents/Anya/making-data-count-getting-started-2019.pdf", 
+                "/",
+                "\\\\"))
 ```
 
 
-Weekly charts
+
+
+Other
 ===
 Column {.sidebar data-width=200}
 -----------------------------------------------------------------------
