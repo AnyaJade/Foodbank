@@ -1,5 +1,6 @@
 ---
 title: "Foodbank"
+date: "Last refreshed: 28/10/2023"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -182,11 +183,27 @@ Column {data-height=350}
 
 
 ```{r Monthly summary table}
-# Finding how many new requests this month
-first_requests <- data_wrangle %>%
-  summarise("first_request" = min(Date, na.rm = FALSE), .by = "ID") %>%
-  mutate("first_request_month" = floor_date(first_request, unit = "month")) %>%
-  count(first_request_month, name = "First Requests")
+# New Households - made first request in a month
+new_households <- data_wrangle %>%
+  summarise("Month" = min(Month, na.rm = FALSE), .by = "ID") %>%
+  count(Month, name = "New Households")
+
+# Frequent Households - made multiple requests in a month
+frequent_households <- data_wrangle %>%
+  count(ID, .by = Month) %>%
+  filter(n > 1) %>%
+  count(.by = `.by`) %>%
+  rename("Month" = `.by`, 
+         "Frequent Households" = n
+         )
+
+# New Households that had multiple requests in their first month
+new_and_frequent_households <- data_wrangle %>%
+  count(ID, .by = Month) %>%
+  filter(n > 1)  %>%
+  summarise("Month" = min(`.by`, na.rm = FALSE), .by = "ID") %>%
+  count(Month, name = "New and Frequent Households")
+
 
 # Creates a summary statistics table with a row for each month and a total row. 
 # Includes number of adults fed, number of children fed, number of requests made 
@@ -199,7 +216,7 @@ data_historic_month <- data_historic %>%
                    ),
             .by = Month
             ) %>%
-  mutate(Requests = NA, `First Requests` = NA)
+  mutate(`Requests` = NA, `New Households` = NA)
 
 data_monthly <- data_wrangle %>%
   select(Month, Adults, Children, ID, Date) %>%
@@ -209,9 +226,11 @@ data_monthly <- data_wrangle %>%
             across(.cols = Date, .fns = ~ n(), .names = "Requests"),
             .by = Month
             ) %>%
-  left_join(first_requests, by = c("Month" = "first_request_month")) %>%
+  left_join(new_households, by = "Month") %>%
   rbind(data_historic_month) %>%
-  arrange(desc(Month))  
+  left_join(frequent_households, by = "Month") %>%
+  arrange(desc(Month)) %>%
+  relocate(`Requests`, .after = last_col()) 
 
 
 renderTable(
@@ -236,7 +255,11 @@ renderTable(
                ) %>%
     mutate("Month" = format(Month, "%b %Y")) %>%
     janitor::adorn_totals("row") %>%
-    select(-input_variable_mod)
+    select(-input_variable_mod) %>%
+    mutate(across(.cols = c(Adults, Children, Households, `New Households`, 
+                          `Frequent Households`, Requests), 
+                  .fns = ~ prettyNum(.))
+         )
     
   }
 
@@ -290,31 +313,37 @@ renderPlotly(
     {
       
       ggplotly(
-        plot_monthly_requests <- data_monthly %>%
-          mutate("input_variable_mod" = ifelse(grepl("20", input$variable_month),
-                                               lubridate::my(input$variable_month), 
-                                               NA
-                                               )
-                 ) %>%
-          filter(case_when(input$variable_month == "Last 3 months" 
-                             ~ Month > report_month - months(3),
-                           input$variable_month == "Last 6 months" 
-                             ~ Month > report_month - months(6),
-                           input$variable_month == "Last 12 months" 
-                             ~ Month > report_month - years(1),
-                           input$variable_month == "All time"
-                             ~ Month > as.Date("2000-01-01"),
-                           TRUE ~ Month >= input_variable_mod
-                           )
-                 ) %>%
-          pivot_longer(cols = c(Requests, `First Requests`),
-                       names_to = "Group",
+        plot_monthly_requests <- data_monthly  %>%
+          left_join(new_and_frequent_households, by = "Month") %>%
+          # mutate("input_variable_mod" = ifelse(grepl("20", input$variable_month),
+          #                                      lubridate::my(input$variable_month), 
+          #                                      NA
+          #                                      )
+          #        ) %>%
+          # filter(case_when(input$variable_month == "Last 3 months" 
+          #                    ~ Month > report_month - months(3),
+          #                  input$variable_month == "Last 6 months" 
+          #                    ~ Month > report_month - months(6),
+          #                  input$variable_month == "Last 12 months" 
+          #                    ~ Month > report_month - years(1),
+          #                  input$variable_month == "All time"
+          #                    ~ Month > as.Date("2000-01-01"),
+          #                  TRUE ~ Month >= input_variable_mod
+          #                  )
+          #        ) %>%
+          mutate("Returning and Frequent" = `Frequent Households` - `New and Frequent Households`,
+                 "New and Infrequent" = `New Households` - `New and Frequent Households`,
+                 "Returning and Infrequent" = Households - `Returning and Frequent` - `New and Frequent Households` - `New and Infrequent`) %>%
+          rename("New and Frequent" = `New and Frequent Households`) %>%
+          select(-Households) %>%
+          pivot_longer(cols = c(`Returning and Frequent`, `New and Frequent`, `New and Infrequent`, `Returning and Infrequent`),
+                       names_to = "Households",
                        values_to = "Value"
                        ) %>%
-          ggplot(aes(Month, Value, fill = Group)) +
+          ggplot(aes(Month, Value, fill = Households)) +
           geom_bar(stat = "identity") +
           theme_bw() +
-          ylab("Number") + scale_fill_manual(values = c("#E69F00", "#CC79A7")))
+          ylab("Number") + scale_fill_manual(values = c("#E69F00", "#CC09B3", "#68228B", "#5CACEE")))
       
         }
     
@@ -334,7 +363,7 @@ Column {.sidebar data-width=200}
 ```{r Dropdown for SPC}
 selectInput("variable_spc",
             label = "Metric",
-            choices = c("Adults", "Children", "Households", "Requests"),
+            choices = c("Adults", "Children", "Households"),
             selected = "Adults"
             )
 ```
@@ -366,16 +395,21 @@ data_weekly_spc <- data_weekly %>%
   filter(Week < report_month)
 ```
 
-### SPC for Number of Adults
+### SPC Chart
 ```{r Weekly SPC}
 renderPlotly(
+  
   {
+    
     data_weekly_spc %>%
       ptd_spc(value_field = !!sym(input$variable_spc),
               date_field = Week,
               improvement_direction = "decrease"
               ) %>%
-      ptd_create_plotly(point_size = 2)
+      ptd_create_plotly(point_size = 2,
+                        x_axis_date_format = "%b %Y",
+                        x_axis_breaks = "1 months"
+                        )
     
   }
   
@@ -384,8 +418,9 @@ renderPlotly(
 
 Column {data-width=100}
 -----------------------------------------------------------------------
-
-SPC chart for Requests is still in development.
+### Summary
+There is no special cause for concern for the number of Adults, Children or 
+Households for the last month.
 
 For more information on SPC please see:
 ```{r}
