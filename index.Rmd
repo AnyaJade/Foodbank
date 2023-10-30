@@ -17,6 +17,7 @@ library(plotly)
 library(readxl)
 library(scales) 
 library(tidyverse) 
+library(sf)
 ```
 
 ```{r Reading in data, echo = FALSE, results = FALSE}
@@ -107,6 +108,12 @@ selectInput("variable_map",
               format("%b %Y") %>%
               as.character()
             )
+
+# selectInput("variable_metric",
+#             label = "Metric",
+#             choices = c("Requests", "Households"),
+#             selected = "Requests"
+#             )
 ```
 
 
@@ -120,17 +127,19 @@ Column {data-width=500}
 renderPlot({
   # Adds spatial data for polygon plotting
   
+    # if chosen households, want to filter to get 1 row per household
+  
   data_spatial <- data_wrangle %>%
-    mutate("input_variable_map_mod" = ifelse(grepl("20", input$variable_map), 
-                                         lubridate::my(input$variable_map), 
+    mutate("input_variable_map_mod" = ifelse(grepl("20", input$variable_map),
+                                         lubridate::my(input$variable_map),
                                          NA
                                          )
            ) %>%
-    filter(case_when(input$variable_map == "Last 3 months" 
+    filter(case_when(input$variable_map == "Last 3 months"
                        ~ Month > report_month - months(3),
-                     input$variable_map == "Last 6 months" 
+                     input$variable_map == "Last 6 months"
                        ~ Month > report_month - months(6),
-                     input$variable_map == "Last 12 months" 
+                     input$variable_map == "Last 12 months"
                        ~ Month > report_month - years(1),
                      input$variable_map == "All time"
                        ~ Month > as.Date("2000-01-01"),
@@ -139,20 +148,26 @@ renderPlot({
            ) %>%
     count(name = "total", .by = postcode_format) %>%
     rename("postcode_format" = `.by`) %>%
-    left_join(data_boundaries, by = c("postcode_format" = "StrSect"))
-  
-  data_spatial %>%
+    left_join(data_boundaries, by = c("postcode_format" = "StrSect")) 
+
+data_merge_wallingford <- data_spatial %>%
+  summarise(geometry = st_union(geometry), .by = Sprawl)
+
+data_spatial %>%
+  select(-geometry) %>%
+  summarise("total" = sum(total), .by = Sprawl) %>%
+  left_join(data_merge_wallingford, by = "Sprawl") %>%
     select(geometry, total, Sprawl) %>%
     mutate("label" = paste(Sprawl, "\n", total)) %>%
     ggplot() +
     geom_sf(mapping = aes(geometry = geometry, fill = total)) +
-  #  scale_fill_viridis_c(option = "plasma")+
+    scale_fill_viridis_c(option = "plasma") +
     geom_sf_label(aes(geometry = geometry, label = label)) + 
     theme_void() +
     labs(fill = "Number of Requests") 
   
   }
-  
+
 )
 ```
 
