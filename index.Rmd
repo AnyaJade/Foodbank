@@ -22,7 +22,7 @@ library(sf)
 
 ```{r Reading in data, echo = FALSE, results = FALSE}
 
-filename <- "C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx"
+filename <- "C:/Users/ridge/OneDrive/Documents/Anya/Files/Database.xlsx"
 
 if(file.exists(filename)) {
   

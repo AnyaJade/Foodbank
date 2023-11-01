@@ -4,23 +4,24 @@
 library("tidyverse")
 library("readxl") 
 library("openxlsx")
+library(excel.link)
 
 
 #### 1 ####
 # To update database with other information
 # To be done manually
-  # E.g., if address, number of clients, children's ages need updating
-  # Take extra info from the latest request tab on the for packing sheet and update client details in the database
-  # Remove updated info from for packing sheet
-  # If name change, remember to change name on requests tab in both spreadsheets
+# E.g., if address, number of clients, children's ages need updating
+# Take extra info from the latest request tab on the for packing sheet and update client details in the database
+# Remove updated info from for packing sheet
+# If name change, remember to change name on requests tab in both spreadsheets
 
 
 #### 2 ####
 # To update database with new clients
 # To be done manually
-  # Take info from the new clients tab on the for packing sheet and update client details in the database
-  # Remove updated info from for packing sheet
-  # Check if added to requests tab
+# Take info from the new clients tab on the for packing sheet and update client details in the database
+# Remove updated info from for packing sheet
+# Check if added to requests tab
 
 # add the unmatched in
 
@@ -28,23 +29,27 @@ library("openxlsx")
 #### 3 ####
 # To update database with new requests
 # Reading in data
-data_base_requests <- read_excel("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
+folder <- "C:/Users/ridge/OneDrive/Documents/Anya/Files/"
+filename_data_base <- paste0(folder, "Database.xlsx")
+filename_packing <- paste0(folder, "For packing.xlsx")
+
+data_base_requests <- read_excel(filename_data_base,
                                  sheet = "Requests",
                                  col_types = c("text", "text", "text")
-                                 )
+)
 
-data_base_details <- read_excel("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
+data_base_details <- read_excel(filename_data_base,
                                 sheet = "Details"
-                                )
+)
 
-data_packing_requests <- read_excel("C:/Users/ridge/OneDrive/Desktop/For packing.xlsx",
+data_packing_requests <- read_excel(filename_packing,
                                     sheet = "Requests",
                                     col_types = c("text", "text", "date", "date", "date", "text", "text")
-                                    )
+)
 
-data_packing_details <- read_excel("C:/Users/ridge/OneDrive/Desktop/For packing.xlsx",
+data_packing_details <- read_excel(filename_packing,
                                    sheet = "Details"
-                                   )
+)
 
 # Pivoting to long format
 new_requests <- data_packing_requests %>%
@@ -79,7 +84,7 @@ data_base_details_update <- data_base_details %>%
   unique()
 
 # Applying 2, 3 and 4 to workbook
-wb_database <- loadWorkbook("C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx")
+wb_database <- loadWorkbook(filename_data_base)
 
 writeData(wb = wb_database,
           sheet = "Details",
@@ -87,28 +92,28 @@ writeData(wb = wb_database,
           startRow = 2,
           startCol = 2,
           colNames = FALSE
-          )
+)
 
 writeData(wb = wb_database,
           sheet = "Requests",
           x = data_requests_updated,
           startRow = 2,
           colNames = FALSE
-          )
+)
 
 saveWorkbook(wb = wb_database,
-             file = "C:/Users/ridge/OneDrive/Documents/Anya/Database.xlsx",
+             file = filename_data_base,
              overwrite = TRUE
-             )
+)
 
 
 #### 4 ####
 # To update for packing sheet with latest info (clients and requests)
 # Overwrite file with
-  # Other info
-  # New clients
-  # Latest request
-wb_packing <- loadWorkbook("C:/Users/ridge/OneDrive/Desktop/For packing.xlsx")
+# Other info
+# New clients
+# Latest request
+wb_packing <- loadWorkbook(filename_packing)
 
 writeData(wb = wb_packing,
           sheet = "Details",
@@ -116,7 +121,7 @@ writeData(wb = wb_packing,
           startRow = 3,
           startCol = 2,
           colNames = FALSE
-          )
+)
 
 deleteData(wb = wb_packing, # check that is clear
            sheet = "Requests",
@@ -129,12 +134,12 @@ writeData(wb = wb_packing,
           sheet = "Requests",
           x = data_requests_last,
           colNames = TRUE
-          )
+)
 
 saveWorkbook(wb = wb_packing,
-             file = "C:/Users/ridge/OneDrive/Desktop/For packing.xlsx",
+             file = filename_packing,
              overwrite = TRUE
-             )
+)
 
 # Check freeze rows
 
