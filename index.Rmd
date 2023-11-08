@@ -1,6 +1,6 @@
 ---
 title: "Foodbank"
-date: "Last refreshed: 28/10/2023"
+date: "Last refreshed: 01/11/2023"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -9,6 +9,7 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
+library(excel.link)
 library(flexdashboard) 
 library(kableExtra)
 library(lubridate)
@@ -26,14 +27,17 @@ filename <- "C:/Users/ridge/OneDrive/Documents/Anya/Files/Database.xlsx"
 
 if(file.exists(filename)) {
   
-  data_base_details <- read_excel(filename,
-                                  sheet = "Details"
+  data_base_details <- xl.read.file(filename,
+                                  xl.sheet = "Details",
+                                  password = "Databas3!"
                                   )
 
-data_base_requests <- read_excel(filename,
-                                 sheet = "Requests"
-                                 )
+data_base_requests <-  xl.read.file(filename,
+                                  xl.sheet = "Requests",
+                                  password = "Databas3!"
+                                  )
 
+#data_base_requests2 <- data_base_requests %>% mutate(Date = as.Date(Date, format = "%d/%m/%Y"))
  data <- data_base_details %>%
    mutate("ID" = row_number(),
           "Adults" = as.numeric(str_sub(Adults, 1, 1)),
@@ -407,7 +411,7 @@ data_weekly <- data_wrangle %>%
   rbind(data_historic_week)
 
 data_weekly_spc <- data_weekly %>%
-  filter(Week < report_month)
+  filter(Week + 10 < report_month)
 ```
 
 ### SPC Chart
@@ -434,8 +438,10 @@ renderPlotly(
 Column {data-width=100}
 -----------------------------------------------------------------------
 ### Summary
-There is no special cause for concern for the number of Adults, Children or 
-Households for the last month.
+Data for after 23rd October is currently not available, but will be soon. 
+
+There is special cause for concern for the number of Adults, Children and 
+Households for the last couple of weeks.
 
 For more information on SPC please see:
 ```{r}

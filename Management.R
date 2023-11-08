@@ -33,35 +33,56 @@ folder <- "C:/Users/ridge/OneDrive/Documents/Anya/Files/"
 filename_data_base <- paste0(folder, "Database.xlsx")
 filename_packing <- paste0(folder, "For packing.xlsx")
 
-data_base_requests <- read_excel(filename_data_base,
-                                 sheet = "Requests",
-                                 col_types = c("text", "text", "text")
-)
+password_data_base <- "NULL"
+password_packing <- "NULL"
 
-data_base_details <- read_excel(filename_data_base,
-                                sheet = "Details"
-)
+data_base_requests <- xl.read.file(filename_data_base,
+                                   xl.sheet = "Requests",
+                                   password = password_data_base
+                                   )
 
-data_packing_requests <- read_excel(filename_packing,
-                                    sheet = "Requests",
-                                    col_types = c("text", "text", "date", "date", "date", "text", "text")
-)
+data_base_details <- xl.read.file(filename_data_base,
+                                   xl.sheet = "Details",
+                                   password = password_data_base
+                                   )
 
-data_packing_details <- read_excel(filename_packing,
-                                   sheet = "Details"
-)
+data_packing_details <- xl.read.file(filename_packing,
+                                  xl.sheet = "Details",
+                                  password = password_packing
+                                  )
+
+data_packing_requests <- xl.read.file(filename_packing,
+                                      xl.sheet = "Requests OLD",
+                                      password = password_packing
+                                      )
 
 # Pivoting to long format
 new_requests <- data_packing_requests %>%
+  mutate(`Last request` = case_when(grepl("-", `Last request`) 
+                                      ~ as.Date(`Last request`),
+                                    grepl("/", `Last request`)
+                                      ~ as.Date(`Last request`, 
+                                                format = "%d/%m/%Y"
+                                                )
+                                    )
+         ) %>%
   pivot_longer(names_to = "Request", values_to = "Date", cols = 3:5) %>%
   select(Surname, `First names`, Date) %>%
-  mutate(Date = format(as.Date(Date), "%d/%m/%Y")) %>%
+ # mutate(Date = format(as.Date(Date), "%d/%m/%Y")) %>%
   na.omit() 
 
 # Updating database with unique new requests
-data_requests_updated <- data_base_requests %>%
-  mutate(Date = ifelse(grepl("/", Date), Date, format(as.Date(as.numeric(Date)-1), "%d/%m/%Y"))) %>%
-  mutate(Date = str_replace(Date, "209", "202")) %>%
+data_requests_updated <- data_base_requests %>% 
+  mutate(Date = case_when(grepl("-", Date) 
+                            ~ as.Date(Date, format = "%Y-%m-%d"),
+                          grepl("/", Date)
+                          ~ as.Date(Date, 
+                                    format = "%d/%m/%Y"
+                                    )
+                          )
+  ) %>%
+ # mutate(Date = ifelse(grepl("/", Date), Date, format(as.Date(as.numeric(Date)-1), "%d/%m/%Y"))) %>%
+  #mutate(Date = str_replace(Date, "209", "202")) %>%
   rbind(new_requests) %>%
   unique() %>%
   arrange(Surname, `First names`)
@@ -84,7 +105,19 @@ data_base_details_update <- data_base_details %>%
   unique()
 
 # Applying 2, 3 and 4 to workbook
-wb_database <- loadWorkbook(filename_data_base)
+wb_database <- createWorkbook()
+
+addWorksheet(wb_database,
+             "Details"
+             )
+
+addWorksheet(wb_database,
+             "Requests"
+)
+
+addWorksheet(wb_database,
+             "Last requests"
+)
 
 writeData(wb = wb_database,
           sheet = "Details",
@@ -101,8 +134,14 @@ writeData(wb = wb_database,
           colNames = FALSE
 )
 
+writeData(wb = wb_database,
+          sheet = "Last requests",
+          x = data_requests_last,
+          colNames = TRUE
+)
+
 saveWorkbook(wb = wb_database,
-             file = filename_data_base,
+             file = r"{C:\Users\ridge\OneDrive\Documents\Anya\Backup\update.xlsx}",
              overwrite = TRUE
 )
 
@@ -113,33 +152,33 @@ saveWorkbook(wb = wb_database,
 # Other info
 # New clients
 # Latest request
-wb_packing <- loadWorkbook(filename_packing)
-
-writeData(wb = wb_packing,
-          sheet = "Details",
-          x = data_base_details_update,
-          startRow = 3,
-          startCol = 2,
-          colNames = FALSE
-)
-
-deleteData(wb = wb_packing, # check that is clear
-           sheet = "Requests",
-           cols = 3:10,
-           rows = 2:nrow(data_requests_updated),
-           gridExpand = TRUE
-)
-
-writeData(wb = wb_packing,
-          sheet = "Requests",
-          x = data_requests_last,
-          colNames = TRUE
-)
-
-saveWorkbook(wb = wb_packing,
-             file = filename_packing,
-             overwrite = TRUE
-)
-
-# Check freeze rows
-
+# wb_packing <- loadWorkbook(filename_packing)
+# 
+# writeData(wb = wb_packing,
+#           sheet = "Details",
+#           x = data_base_details_update,
+#           startRow = 3,
+#           startCol = 2,
+#           colNames = FALSE
+# )
+# 
+# deleteData(wb = wb_packing, # check that is clear
+#            sheet = "Requests",
+#            cols = 3:10,
+#            rows = 2:nrow(data_requests_updated),
+#            gridExpand = TRUE
+# )
+# 
+# writeData(wb = wb_packing,
+#           sheet = "Requests",
+#           x = data_requests_last,
+#           colNames = TRUE
+# )
+# 
+# saveWorkbook(wb = wb_packing,
+#              file = filename_packing,
+#              overwrite = TRUE
+# )
+# 
+# # Check freeze rows
+# 
