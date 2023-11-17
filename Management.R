@@ -23,8 +23,9 @@ library(excel.link)
 # Remove updated info from for packing sheet
 # Check if added to requests tab
 
-# add the unmatched in
-
+# move requests to upload
+# add in passwords
+# run below
 
 #### 3 ####
 # To update database with new requests
@@ -52,7 +53,7 @@ data_packing_details <- xl.read.file(filename_packing,
                                   )
 
 data_packing_requests <- xl.read.file(filename_packing,
-                                      xl.sheet = "Requests OLD",
+                                      xl.sheet = "Upload",
                                       password = password_packing
                                       )
 
@@ -66,8 +67,8 @@ new_requests <- data_packing_requests %>%
                                                 )
                                     )
          ) %>%
-  pivot_longer(names_to = "Request", values_to = "Date", cols = 3:5) %>%
-  select(Surname, `First names`, Date) %>%
+  pivot_longer(names_to = "Request", values_to = "Date", cols = 3:4) %>%
+  select(Surname, `First names`, Date, `Authorisation number`, `Voucher type`) %>%
  # mutate(Date = format(as.Date(Date), "%d/%m/%Y")) %>%
   na.omit() 
 
@@ -146,39 +147,11 @@ saveWorkbook(wb = wb_database,
 )
 
 
-#### 4 ####
-# To update for packing sheet with latest info (clients and requests)
-# Overwrite file with
-# Other info
-# New clients
-# Latest request
-# wb_packing <- loadWorkbook(filename_packing)
-# 
-# writeData(wb = wb_packing,
-#           sheet = "Details",
-#           x = data_base_details_update,
-#           startRow = 3,
-#           startCol = 2,
-#           colNames = FALSE
-# )
-# 
-# deleteData(wb = wb_packing, # check that is clear
-#            sheet = "Requests",
-#            cols = 3:10,
-#            rows = 2:nrow(data_requests_updated),
-#            gridExpand = TRUE
-# )
-# 
-# writeData(wb = wb_packing,
-#           sheet = "Requests",
-#           x = data_requests_last,
-#           colNames = TRUE
-# )
-# 
-# saveWorkbook(wb = wb_packing,
-#              file = filename_packing,
-#              overwrite = TRUE
-# )
-# 
-# # Check freeze rows
-# 
+# Find update file
+# Paste over database details
+# Past over packing details
+# past over packing requests
+# past over database requests
+# check, hide and save packing
+# remove passwords from script ^
+

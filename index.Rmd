@@ -29,12 +29,12 @@ if(file.exists(filename)) {
   
   data_base_details <- xl.read.file(filename,
                                   xl.sheet = "Details",
-                                  password = "Databas3!"
+                                  password = "NULL"
                                   )
 
 data_base_requests <-  xl.read.file(filename,
                                   xl.sheet = "Requests",
-                                  password = "Databas3!"
+                                  password = "NULL"
                                   )
 
 #data_base_requests2 <- data_base_requests %>% mutate(Date = as.Date(Date, format = "%d/%m/%Y"))
