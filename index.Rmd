@@ -1,6 +1,6 @@
 ---
 title: "Foodbank"
-date: "Last refreshed: 01/11/2023"
+date: "Last refreshed: `r Sys.Date()`"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -22,19 +22,20 @@ library(sf)
 ```
 
 ```{r Reading in data, echo = FALSE, results = FALSE}
-
 filename <- "C:/Users/ridge/OneDrive/Documents/Anya/Files/Database.xlsx"
+
+password_database <- "NULL"
 
 if(file.exists(filename)) {
   
   data_base_details <- xl.read.file(filename,
                                   xl.sheet = "Details",
-                                  password = "NULL"
+                                  password = password_database
                                   )
 
 data_base_requests <-  xl.read.file(filename,
                                   xl.sheet = "Requests",
-                                  password = "NULL"
+                                  password = password_database
                                   )
 
 #data_base_requests2 <- data_base_requests %>% mutate(Date = as.Date(Date, format = "%d/%m/%Y"))
@@ -411,7 +412,7 @@ data_weekly <- data_wrangle %>%
   rbind(data_historic_week)
 
 data_weekly_spc <- data_weekly %>%
-  filter(Week + 10 < report_month)
+  filter(Week < floor_date(Sys.Date(), "week") + 1)
 ```
 
 ### SPC Chart
@@ -419,7 +420,6 @@ data_weekly_spc <- data_weekly %>%
 renderPlotly(
   
   {
-    
     data_weekly_spc %>%
       ptd_spc(value_field = !!sym(input$variable_spc),
               date_field = Week,
@@ -433,15 +433,44 @@ renderPlotly(
   }
   
 )
+
+spc_trend <- function(group) {
+  
+  spc <- data_weekly_spc %>%
+    ptd_spc(value_field = !!sym(group),
+            date_field = Week,
+            improvement_direction = "decrease") %>%
+    filter(x == max(x))
+  
+  trend <- case_when(spc$point_type == "special_cause_concern" 
+                       ~ "a deterioring trend",
+                     spc$point_type == "common_cause" 
+                       ~ "no trend",
+                     spc$point_type == "special_cause_improvement"
+                       ~ "an improving trend",
+                     TRUE ~ "ERROR!  PLease check"
+                     )
+  
+  trend
+
+}
 ```
 
 Column {data-width=100}
 -----------------------------------------------------------------------
 ### Summary
-Data for after 23rd October is currently not available, but will be soon. 
+Data is only shown up to Sunday of the last week.
 
-There is special cause for concern for the number of Adults, Children and 
-Households for the last couple of weeks.
+#### Adults
+There is `r spc_trend("Adults")` for the number of Adults fed.
+
+#### Children
+There is `r spc_trend("Children")` for the number of Children fed.
+
+#### Households
+There is `r spc_trend("Households")` for the number of Households fed.
+
+
 
 For more information on SPC please see:
 ```{r}
